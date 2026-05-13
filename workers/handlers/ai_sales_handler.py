@@ -11,6 +11,17 @@ from workers.agents import IntentClassifier, SalesAgent
 from workers.services.session import SessionService
 from workers.services.whatsapp_sender import WhatsAppSender
 
+
+def _resolve_agent(brand: str, company_name: str, product_category: str):
+    """Resolve qual agente usar baseado na marca configurada."""
+    if brand.lower() == "keune":
+        from workers.agents.configs.keune import KeuneSalesAgent
+        return KeuneSalesAgent()
+    return SalesAgent(
+        company_name=company_name,
+        product_category=product_category,
+    )
+
 log = structlog.get_logger()
 
 
@@ -36,7 +47,9 @@ class AISalesHandler:
         self.session = session
         self.sender = sender
         self.classifier = IntentClassifier()
-        self.agent = SalesAgent(
+        brand = os.getenv("AGENT_BRAND", "default")
+        self.agent = _resolve_agent(
+            brand=brand,
             company_name=company_name or os.getenv("COMPANY_NAME", "Boost"),
             product_category=product_category or os.getenv("PRODUCT_CATEGORY", "produtos"),
         )
