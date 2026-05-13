@@ -81,7 +81,9 @@ boost/
 │   └── agents/           # 🧠 LangChain Sales Agent
 │       ├── prompts/      # 12 templates por fase do funil
 │       ├── tools/        # 8 tools (catálogo, CRM, handoff)
-│       └── chains/       # IntentClassifier, SalesAgent
+│       ├── chains/       # IntentClassifier, SalesAgent
+│       └── configs/      # 🎨 White-label por marca
+│           └── keune/    # Lara — agente Keune Brasil
 │
 ├── infra/                # AWS CDK — IaC completo
 │   └── stacks/           # queue, storage, webhook, worker
@@ -188,6 +190,23 @@ PRODUCT_CATEGORY=cosméticos
 
 Cada tool tem stub funcional pronto — substitua os `# TODO` por integrações reais (HubSpot, Pipedrive, ViaCEP, etc).
 
+### 🎨 White-label por marca
+
+O agente suporta múltiplas marcas via `AGENT_BRAND` no `.env`. Cada marca tem persona, catálogo, FAQ e tools próprias em `workers/agents/configs/<brand>/`.
+
+| Marca | Status | Doc |
+|-------|--------|-----|
+| `default` | ✅ Agente genérico (Júlia) | [docs/sales_agent.md](docs/sales_agent.md) |
+| `keune` | ✅ Lara — Keune Brasil (haircare premium, B2C+B2B) | [docs/keune_agent.md](docs/keune_agent.md) |
+
+**Exemplo Keune:**
+```bash
+AGENT_BRAND=keune
+```
+A Lara identifica se é cabeleireiro (B2B → conecta com representante regional) ou consumidor final (B2C → diagnóstico capilar + kit recomendado das linhas Care/So Pure/Style/Color/Man/Blend).
+
+**Para criar uma marca nova:** copie `workers/agents/configs/keune/` para `workers/agents/configs/<sua_marca>/`, ajuste persona/catalog/tools, e o handler resolve automaticamente.
+
 ### Trocar OpenAI por Claude
 
 Em [workers/agents/chains/sales_agent.py](workers/agents/chains/sales_agent.py):
@@ -240,8 +259,9 @@ Atualização automática a cada 30s + subscrição realtime no Supabase para o 
 |----------|-----------|---------|
 | `USE_AI_AGENT` | Liga/desliga LangChain | `true` |
 | `OPENAI_API_KEY` | Chave OpenAI | — |
-| `COMPANY_NAME` | Nome da empresa no system prompt | `Boost` |
-| `PRODUCT_CATEGORY` | Categoria de produto | `produtos` |
+| `AGENT_BRAND` | Persona white-label: `default` ou `keune` | `default` |
+| `COMPANY_NAME` | Nome da empresa no system prompt (`default` apenas) | `Boost` |
+| `PRODUCT_CATEGORY` | Categoria de produto (`default` apenas) | `produtos` |
 
 ---
 
@@ -278,6 +298,8 @@ Atualização automática a cada 30s + subscrição realtime no Supabase para o 
 - [x] Sales Agent LangChain (prompts + tools + chains)
 - [x] Dashboard React em tempo real
 - [x] Infraestrutura CDK completa
+- [x] Configuração white-label por marca (Keune Brasil)
+- [ ] Integração real com e-commerce Keune (catálogo via API)
 - [ ] Suporte multi-tenant (vários números WhatsApp)
 - [ ] Editor visual de flows no dashboard
 - [ ] Conector Claude (Anthropic SDK) como alternativa OpenAI
@@ -305,7 +327,8 @@ docker compose logs -f webhook
 
 ## 📚 Documentação
 
-- [docs/sales_agent.md](docs/sales_agent.md) — Guia completo do agente LangChain
+- [docs/sales_agent.md](docs/sales_agent.md) — Guia completo do agente LangChain (Júlia)
+- [docs/keune_agent.md](docs/keune_agent.md) — Configuração Keune Brasil (Lara) com B2C/B2B
 - [docs/schema.sql](docs/schema.sql) — Schema PostgreSQL com índices e funções
 
 ---
