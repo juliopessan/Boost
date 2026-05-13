@@ -7,6 +7,7 @@ import time
 import structlog
 import logging
 
+from workers.handlers.ai_sales_handler import AISalesHandler
 from workers.handlers.audio_handler import AudioHandler
 from workers.handlers.button_handler import ButtonHandler
 from workers.handlers.fallback_handler import FallbackHandler
@@ -39,9 +40,16 @@ def _build_dependencies():
 
 def _route(envelope: dict, session: SessionService, sender: WhatsAppSender) -> dict:
     msg_type = envelope.get("type", "unknown")
+    use_ai = os.environ.get("USE_AI_AGENT", "true").lower() == "true"
+
+    text_handler_fn = (
+        (lambda: AISalesHandler(session, sender).handle(envelope))
+        if use_ai
+        else (lambda: TextHandler(session, sender).handle(envelope))
+    )
 
     handlers = {
-        "text": lambda: TextHandler(session, sender).handle(envelope),
+        "text": text_handler_fn,
         "button": lambda: ButtonHandler(session, sender).handle(envelope),
         "interactive": lambda: ButtonHandler(session, sender).handle(envelope),
         "audio": lambda: AudioHandler(sender).handle(envelope),

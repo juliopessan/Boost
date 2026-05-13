@@ -85,6 +85,16 @@ cdk deploy --all
 - Gestão de sessão por conversa via Redis (TTL 30min)
 - Logs estruturados JSON para CloudWatch
 
+### Sales Agent (`/workers/agents`) — LangChain
+- Agente de vendas WhatsApp com LangChain + OpenAI
+- 12 prompt templates organizados por fase do funil (greeting, qualification, pitch, objection, closing, checkout)
+- 8 tools integráveis: consultar catálogo, estoque, frete, CRM, transferir humano, agendar follow-up
+- Classificador de intenção (10 categorias) com transferência automática para humano
+- Memória de conversa persistida no Redis (últimos 20 turnos por sessão)
+- Toggle `USE_AI_AGENT=true/false` no `.env` para A/B test contra o handler estático
+
+Docs completas: [docs/sales_agent.md](docs/sales_agent.md)
+
 ### Dashboard (`/dashboard`)
 - React + Tailwind + Supabase Realtime
 - Páginas: Dashboard, Flows, Mensagens, DLQ, Configurações
