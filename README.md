@@ -98,7 +98,8 @@ boost/
 │   ├── model_router.py   # Haiku classifica → Sonnet responde
 │   ├── context_compactor.py # Compacta histórico aos 40% da janela
 │   ├── sdr_agent.py      # Agentic loop com tool use + cache
-│   └── webhook_server.py # FastAPI recebe Evolution API
+│   ├── webhook_server.py # FastAPI recebe Evolution API
+│   └── integrations/     # Clientes: Evolution, HubSpot/Pipedrive, Calendly, Slack
 │
 ├── docs/                 # Schema SQL, docs do sales agent
 └── scripts/              # LocalStack init, utilitários
@@ -307,6 +308,7 @@ Atualização automática a cada 30s + subscrição realtime no Supabase para o 
 - [x] Infraestrutura CDK completa
 - [x] Configuração white-label por marca (Keune Brasil)
 - [x] SDR Agent com Anthropic puro + Evolution API (`sdr_whatsapp/`)
+- [x] Integrações reais SDR: Evolution API + HubSpot/Pipedrive + Calendly + Slack
 - [ ] Integração real com e-commerce Keune (catálogo via API)
 - [ ] Suporte multi-tenant (vários números WhatsApp)
 - [ ] Editor visual de flows no dashboard

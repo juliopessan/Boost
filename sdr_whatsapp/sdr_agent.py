@@ -13,6 +13,7 @@ Fluxo por mensagem recebida:
 import os
 import json
 import asyncio
+import logging
 import anthropic
 from datetime import datetime
 
@@ -20,10 +21,55 @@ from sdr_config import SDR_SYSTEM_PROMPT, MODELS, CACHE_TTL
 from model_router import classify_message, estimate_turn_cost
 from context_compactor import maybe_compact
 
+from integrations import (
+    CalendlyClient,
+    EvolutionClient,
+    SlackClient,
+    get_crm_client,
+)
+
+log = logging.getLogger(__name__)
+
 
 # ─── CLIENTE ──────────────────────────────────────────────────────────────────
 
 client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+
+# ─── INTEGRAÇÕES (lazy singletons) ────────────────────────────────────────────
+
+_evolution: EvolutionClient | None = None
+_calendly: CalendlyClient | None = None
+_slack: SlackClient | None = None
+_crm = None
+
+
+def _get_evolution() -> EvolutionClient:
+    global _evolution
+    if _evolution is None:
+        _evolution = EvolutionClient()
+    return _evolution
+
+
+def _get_calendly() -> CalendlyClient:
+    global _calendly
+    if _calendly is None:
+        _calendly = CalendlyClient()
+    return _calendly
+
+
+def _get_slack() -> SlackClient:
+    global _slack
+    if _slack is None:
+        _slack = SlackClient()
+    return _slack
+
+
+def _get_crm():
+    global _crm
+    if _crm is None:
+        _crm = get_crm_client()
+    return _crm
 
 
 # ─── TOOL DEFINITIONS ────────────────────────────────────────────────────────
@@ -98,44 +144,150 @@ SDR_TOOLS = [
 
 async def execute_tool(tool_name: str, tool_input: dict) -> str:
     """
-    Executa a tool real. Aqui você conecta à Evolution API, CRM, Calendly, etc.
-    Retorne sempre uma string com o resultado para o agente continuar.
+    Executa a tool real conectando às integrações reais:
+    Evolution API, HubSpot/Pipedrive, Calendly, Slack.
+
+    Retorna sempre uma string JSON com o resultado para o agente continuar.
+    Erros são capturados e retornados como JSON com chave "error".
     """
-    if tool_name == "send_whatsapp_message":
-        # TODO: POST https://sua-evolution-api/message/sendText/{instance}
-        phone   = tool_input["phone"]
-        message = tool_input["message"]
-        print(f"📱 WhatsApp → {phone}: {message}")
-        return json.dumps({"status": "sent", "phone": phone})
+    try:
+        if tool_name == "send_whatsapp_message":
+            phone = tool_input["phone"]
+            message = tool_input["message"]
 
-    elif tool_name == "get_lead_context":
-        # TODO: buscar no seu CRM
-        phone = tool_input["phone"]
-        return json.dumps({
-            "phone":   phone,
-            "name":    "Lead Desconhecido",
-            "company": None,
-            "stage":   "novo",
-        })
+            evolution = _get_evolution()
+            # UX humano: typing indicator antes de enviar
+            try:
+                await evolution.send_typing_indicator(phone, duration_ms=1500)
+            except Exception as e:
+                log.warning(f"typing indicator falhou: {e}")
 
-    elif tool_name == "book_meeting":
-        # TODO: Calendly API
-        return json.dumps({
-            "status":      "scheduled",
-            "meeting_url": "https://calendly.com/sua-empresa/20min",
-        })
+            result = await evolution.send_text(phone, message)
+            print(f"📱 WhatsApp → {phone}: {message[:80]}")
+            return json.dumps({
+                "status": "sent",
+                "phone": phone,
+                "message_id": result.get("key", {}).get("id"),
+            })
 
-    elif tool_name == "update_crm":
-        # TODO: atualizar seu CRM
-        print(f"📊 CRM atualizado: {tool_input}")
-        return json.dumps({"status": "updated"})
+        elif tool_name == "get_lead_context":
+            phone = tool_input["phone"]
+            crm = _get_crm()
+            lead = await crm.get_lead_by_phone(phone)
 
-    elif tool_name == "handoff_to_human":
-        # TODO: notificar vendedor (Slack, email, etc.)
-        print(f"🚨 Handoff para humano: {tool_input['reason']}")
-        return json.dumps({"status": "handoff_initiated"})
+            if lead is None:
+                return json.dumps({
+                    "phone": phone,
+                    "found": False,
+                    "stage": "novo",
+                    "message": "Lead não encontrado no CRM — primeiro contato",
+                })
 
-    return json.dumps({"error": f"Tool {tool_name} não implementada"})
+            return json.dumps({"found": True, **lead})
+
+        elif tool_name == "book_meeting":
+            phone = tool_input["phone"]
+            lead_name = tool_input.get("lead_name", "Lead")
+            preferred_time = tool_input.get("preferred_time")
+
+            calendly = _get_calendly()
+            link = await calendly.create_single_use_link()
+
+            # Atualiza CRM com link e estágio cta
+            try:
+                crm = _get_crm()
+                await crm.upsert_lead(
+                    phone=phone,
+                    stage="cta",
+                    notes=f"Link Calendly enviado: {link['booking_url']} | Horário preferencial: {preferred_time}",
+                )
+            except Exception as e:
+                log.warning(f"crm update após booking falhou: {e}")
+
+            # Envia link via WhatsApp
+            try:
+                evolution = _get_evolution()
+                await evolution.send_text(
+                    phone=phone,
+                    message=(
+                        f"Perfeito, {lead_name.split()[0] if lead_name else 'tudo certo'}! "
+                        f"Aqui está o link para agendar nossa call de 20 min:\n\n"
+                        f"{link['booking_url']}\n\n"
+                        f"Escolhe o horário que melhor te encaixa 😉"
+                    ),
+                    link_preview=True,
+                )
+            except Exception as e:
+                log.warning(f"envio do link falhou: {e}")
+
+            return json.dumps({
+                "status": "scheduled",
+                "meeting_url": link["booking_url"],
+                "is_fallback": link.get("is_fallback", False),
+            })
+
+        elif tool_name == "update_crm":
+            crm = _get_crm()
+            result = await crm.upsert_lead(
+                phone=tool_input["phone"],
+                stage=tool_input["stage"],
+                bant_score=tool_input.get("bant_score"),
+                notes=tool_input.get("notes"),
+            )
+            print(f"📊 CRM atualizado: {tool_input.get('stage')} BANT={tool_input.get('bant_score')}")
+            return json.dumps({
+                "status": "updated",
+                "crm_id": result.get("id") or result.get("data", {}).get("id"),
+            })
+
+        elif tool_name == "handoff_to_human":
+            phone = tool_input["phone"]
+            reason = tool_input["reason"]
+
+            # Busca contexto do lead pra enriquecer notificação
+            lead_info: dict = {}
+            try:
+                crm = _get_crm()
+                lead = await crm.get_lead_by_phone(phone)
+                if lead:
+                    lead_info = lead
+            except Exception as e:
+                log.warning(f"lookup lead pre-handoff falhou: {e}")
+
+            # Notifica Slack
+            slack = _get_slack()
+            slack_result = await slack.send_handoff(
+                phone=phone,
+                reason=reason,
+                lead_name=lead_info.get("name"),
+                company=lead_info.get("company"),
+                bant_score=lead_info.get("bant_score"),
+                priority="high" if "urgente" in reason.lower() or "reclamação" in reason.lower() else "medium",
+            )
+
+            # Marca estágio "encerrado" no CRM
+            try:
+                crm = _get_crm()
+                await crm.upsert_lead(
+                    phone=phone,
+                    stage="encerrado",
+                    notes=f"Handoff humano. Motivo: {reason}",
+                )
+            except Exception as e:
+                log.warning(f"crm update no handoff falhou: {e}")
+
+            print(f"🚨 Handoff: {reason}")
+            return json.dumps({
+                "status": "handoff_initiated",
+                "slack_notified": slack_result.get("ok", False),
+                "reason": reason,
+            })
+
+        return json.dumps({"error": f"Tool {tool_name} não implementada"})
+
+    except Exception as e:
+        log.error(f"tool_execution_failed: {tool_name} — {e}")
+        return json.dumps({"error": str(e), "tool": tool_name})
 
 
 # ─── SDR AGENT — TURN ÚNICO ───────────────────────────────────────────────────
