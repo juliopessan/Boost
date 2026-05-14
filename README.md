@@ -93,6 +93,13 @@ boost/
 │       ├── pages/        # Dashboard, Flows, Messages, DLQ, Settings
 │       └── components/   # MetricCard, MessageFeed, HourlyChart, etc
 │
+├── sdr_whatsapp/         # 🎯 SDR alternativo: Anthropic puro + Evolution API
+│   ├── sdr_config.py     # Modelos, preços, prompts (Sofia)
+│   ├── model_router.py   # Haiku classifica → Sonnet responde
+│   ├── context_compactor.py # Compacta histórico aos 40% da janela
+│   ├── sdr_agent.py      # Agentic loop com tool use + cache
+│   └── webhook_server.py # FastAPI recebe Evolution API
+│
 ├── docs/                 # Schema SQL, docs do sales agent
 └── scripts/              # LocalStack init, utilitários
 ```
@@ -299,6 +306,7 @@ Atualização automática a cada 30s + subscrição realtime no Supabase para o 
 - [x] Dashboard React em tempo real
 - [x] Infraestrutura CDK completa
 - [x] Configuração white-label por marca (Keune Brasil)
+- [x] SDR Agent com Anthropic puro + Evolution API (`sdr_whatsapp/`)
 - [ ] Integração real com e-commerce Keune (catálogo via API)
 - [ ] Suporte multi-tenant (vários números WhatsApp)
 - [ ] Editor visual de flows no dashboard
@@ -329,6 +337,7 @@ docker compose logs -f webhook
 
 - [docs/sales_agent.md](docs/sales_agent.md) — Guia completo do agente LangChain (Júlia)
 - [docs/keune_agent.md](docs/keune_agent.md) — Configuração Keune Brasil (Lara) com B2C/B2B
+- [sdr_whatsapp/README.md](sdr_whatsapp/README.md) — SDR otimizado com Anthropic puro + Evolution API (Sofia)
 - [docs/schema.sql](docs/schema.sql) — Schema PostgreSQL com índices e funções
 
 ---
