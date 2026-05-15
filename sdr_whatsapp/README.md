@@ -115,6 +115,26 @@ Todas as 5 tools do agent (`send_whatsapp_message`, `get_lead_context`,
 
 ---
 
+## 🔒 Gestão de credenciais
+
+Todas as credenciais são lidas via [`secrets.py`](secrets.py) que suporta 3 backends:
+
+| Backend | `SECRETS_BACKEND` | Quando usar |
+|---------|-------------------|-------------|
+| Env / .env | `env` (default) | Desenvolvimento local |
+| AWS Parameter Store | `aws_parameter_store` | Staging |
+| AWS Secrets Manager | `aws_secrets_manager` | Produção |
+
+**Nunca** comite o `.env` — ele está no `.gitignore` e o [pre-commit hook](../scripts/check_secrets.sh) bloqueia padrões de segredo conhecidos.
+
+Verifique a configuração:
+```bash
+python -m scripts.check_evolution   # valida Evolution sem expor secrets
+curl http://localhost:8000/evolution-status  # mesmo via HTTP
+```
+
+Política completa em [SECURITY.md](../SECURITY.md).
+
 ## Deploy
 
 ### 1. Instalar dependências

@@ -6,6 +6,15 @@ Gerencia histórico por número de telefone via dict em memória
 """
 
 import asyncio
+from pathlib import Path
+
+# Carrega .env local antes de qualquer import que consuma secrets
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from collections import defaultdict
@@ -86,6 +95,25 @@ async def evolution_webhook(request: Request):
 @app.get("/health")
 async def health():
     return {"status": "ok", "active_conversations": len(conversation_store)}
+
+
+@app.get("/evolution-status")
+async def evolution_status():
+    """
+    Valida conectividade com a Evolution API (sem expor credenciais).
+    Útil para health check em load balancer / monitoring.
+    """
+    from integrations.evolution import EvolutionAPIError, EvolutionClient
+    try:
+        client = EvolutionClient()
+        state = await client.check_connection()
+        return {
+            "ok": state["connected"],
+            "state": state["state"],
+            "instance": state["instance"],
+        }
+    except (RuntimeError, EvolutionAPIError) as e:
+        raise HTTPException(status_code=503, detail=f"Evolution API check failed: {e}")
 
 
 @app.get("/cost-report")
